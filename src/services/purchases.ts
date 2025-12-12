@@ -2,6 +2,7 @@ import Purchases, {
   PurchasesPackage,
   CustomerInfo,
   LOG_LEVEL,
+  PurchasesError,
 } from 'react-native-purchases';
 import { Platform } from 'react-native';
 
@@ -38,6 +39,12 @@ class PurchaseService {
         ? REVENUECAT_API_KEY_IOS
         : REVENUECAT_API_KEY_ANDROID;
 
+      // Skip initialization if using placeholder keys (development mode)
+      if (apiKey.startsWith('your_')) {
+        console.log('RevenueCat: Using placeholder API key, skipping initialization');
+        return;
+      }
+
       await Purchases.configure({ apiKey });
       this.isInitialized = true;
     } catch (error) {
@@ -47,6 +54,10 @@ class PurchaseService {
   }
 
   async getAvailablePlans(): Promise<PremiumPlan[]> {
+    if (!this.isInitialized) {
+      return this.getDefaultPlans();
+    }
+
     try {
       const offerings = await Purchases.getOfferings();
 
@@ -177,6 +188,13 @@ class PurchaseService {
     planId: string,
     userId: string
   ): Promise<{ success: boolean; plan: PremiumPlan | null }> {
+    if (!this.isInitialized) {
+      console.log('RevenueCat not initialized - purchase simulation');
+      // In development, simulate successful purchase
+      const plan = this.getDefaultPlans().find((p) => p.id === planId) || null;
+      return { success: true, plan };
+    }
+
     try {
       // Set user ID for RevenueCat
       await Purchases.logIn(userId);
@@ -197,8 +215,9 @@ class PurchaseService {
       }
 
       return { success: false, plan: null };
-    } catch (error: any) {
-      if (error.userCancelled) {
+    } catch (error) {
+      const purchasesError = error as PurchasesError;
+      if (purchasesError.userCancelled) {
         console.log('User cancelled purchase');
       } else {
         console.error('Error purchasing subscription:', error);
@@ -208,11 +227,11 @@ class PurchaseService {
   }
 
   async checkSubscriptionStatus(userId: string): Promise<SubscriptionStatus> {
-    try {
-      if (!this.isInitialized) {
-        return { isActive: false, plan: null, expiresAt: null };
-      }
+    if (!this.isInitialized) {
+      return { isActive: false, plan: null, expiresAt: null };
+    }
 
+    try {
       await Purchases.logIn(userId);
       const customerInfo = await Purchases.getCustomerInfo();
 
@@ -240,6 +259,10 @@ class PurchaseService {
   async restorePurchases(
     userId: string
   ): Promise<{ success: boolean; plan: PremiumPlan | null }> {
+    if (!this.isInitialized) {
+      return { success: false, plan: null };
+    }
+
     try {
       await Purchases.logIn(userId);
       const customerInfo = await Purchases.restorePurchases();
