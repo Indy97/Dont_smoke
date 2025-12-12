@@ -23,7 +23,7 @@ type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'
 
 export default function LoginScreen() {
   const navigation = useNavigation<LoginScreenNavigationProp>();
-  const { signIn, isLoading } = useAuth();
+  const { signIn, signInAsDemo, isLoading } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,6 +59,14 @@ export default function LoginScreen() {
         'Błąd logowania',
         error.message || 'Nie udało się zalogować. Sprawdź dane i spróbuj ponownie.'
       );
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    try {
+      await signInAsDemo();
+    } catch (error: any) {
+      Alert.alert('Błąd', 'Nie udało się uruchomić trybu demo.');
     }
   };
 
@@ -144,6 +152,16 @@ export default function LoginScreen() {
               onPress={() => navigation.navigate('Register')}
             >
               <Text style={styles.registerButtonText}>Utwórz nowe konto</Text>
+            </TouchableOpacity>
+
+            {/* Demo Mode Button */}
+            <TouchableOpacity
+              style={styles.demoButton}
+              onPress={handleDemoLogin}
+              disabled={isLoading}
+            >
+              <Ionicons name="play-circle-outline" size={20} color="#666" />
+              <Text style={styles.demoButtonText}>Wypróbuj bez rejestracji (Demo)</Text>
             </TouchableOpacity>
           </View>
 
@@ -272,6 +290,20 @@ const styles = StyleSheet.create({
     color: '#1a5f2a',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  demoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 15,
+    paddingVertical: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+  },
+  demoButtonText: {
+    color: '#666',
+    fontSize: 14,
+    marginLeft: 8,
   },
   footer: {
     marginTop: 30,

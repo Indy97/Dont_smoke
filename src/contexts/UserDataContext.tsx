@@ -20,8 +20,32 @@ interface UserDataContextType {
 
 const UserDataContext = createContext<UserDataContextType | undefined>(undefined);
 
+// Demo data for testing
+const createDemoData = (): SmokingData => {
+  const quitDate = new Date();
+  quitDate.setDate(quitDate.getDate() - 7); // Started 7 days ago
+
+  const checkIns: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    checkIns.push(date.toISOString().split('T')[0]);
+  }
+
+  return {
+    quitDate: quitDate.toISOString(),
+    cigarettesPerDay: 20,
+    pricePerPack: 22,
+    cigarettesPerPack: 20,
+    currentStreak: 7,
+    longestStreak: 7,
+    checkIns,
+    lastCheckIn: new Date().toISOString().split('T')[0],
+  };
+};
+
 export function UserDataProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isDemo } = useAuth();
   const [smokingData, setSmokingData] = useState<SmokingData | null>(null);
   const [unlockedAchievements, setUnlockedAchievements] = useState<Achievement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,30 +58,48 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
       setUnlockedAchievements([]);
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, isDemo]);
 
   const loadUserData = async () => {
     setIsLoading(true);
     try {
       // Try to load from local storage first
       const localData = await AsyncStorage.getItem(`smokingData_${user?.uid}`);
+
       if (localData) {
         const parsed = JSON.parse(localData);
         setSmokingData(parsed);
         updateAchievements(parsed);
+      } else if (isDemo) {
+        // Create demo data for first-time demo users
+        const demoData = createDemoData();
+        setSmokingData(demoData);
+        updateAchievements(demoData);
+        await AsyncStorage.setItem(`smokingData_${user?.uid}`, JSON.stringify(demoData));
       }
 
-      // Then sync with server
-      if (user) {
-        const serverData = await userDataService.getSmokingData(user.uid);
-        if (serverData) {
-          setSmokingData(serverData);
-          updateAchievements(serverData);
-          await AsyncStorage.setItem(`smokingData_${user.uid}`, JSON.stringify(serverData));
+      // Only sync with server for non-demo users
+      if (user && !isDemo) {
+        try {
+          const serverData = await userDataService.getSmokingData(user.uid);
+          if (serverData) {
+            setSmokingData(serverData);
+            updateAchievements(serverData);
+            await AsyncStorage.setItem(`smokingData_${user.uid}`, JSON.stringify(serverData));
+          }
+        } catch (error) {
+          console.log('Firebase not configured, using local storage only');
         }
       }
     } catch (error) {
       console.error('Error loading user data:', error);
+
+      // Fallback to demo data if nothing else works
+      if (isDemo) {
+        const demoData = createDemoData();
+        setSmokingData(demoData);
+        updateAchievements(demoData);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +163,15 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
     updateAchievements(updatedData);
 
     await AsyncStorage.setItem(`smokingData_${user.uid}`, JSON.stringify(updatedData));
-    await userDataService.updateSmokingData(user.uid, updatedData);
+
+    // Only sync with Firebase for non-demo users
+    if (!isDemo) {
+      try {
+        await userDataService.updateSmokingData(user.uid, updatedData);
+      } catch (error) {
+        console.log('Firebase not configured, saved locally only');
+      }
+    }
   };
 
   const updateSmokingProfile = async (
@@ -152,7 +202,15 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
 
     setSmokingData(updatedData);
     await AsyncStorage.setItem(`smokingData_${user.uid}`, JSON.stringify(updatedData));
-    await userDataService.updateSmokingData(user.uid, updatedData);
+
+    // Only sync with Firebase for non-demo users
+    if (!isDemo) {
+      try {
+        await userDataService.updateSmokingData(user.uid, updatedData);
+      } catch (error) {
+        console.log('Firebase not configured, saved locally only');
+      }
+    }
   };
 
   const hasCheckedInToday = (): boolean => {
